@@ -4,6 +4,7 @@ Adsorption continuation: wall-liquid isotherm computation via Newton + continuat
 Vext and pkldir are set via WALL string (wn2 or wc) as in neural_cdft_dbh.
 """
 import os
+from re import A
 import sys
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -28,6 +29,7 @@ from libs.ml.loss import LossL1
 from libs.io_utils import load_pickle, DataNotFoundError
 from libs.plot_utils import get_plot_dir, ensure_plot_dir
 from libs.utils import resolve_training_device, tensors_to_cpu_for_storage
+from libs.thermodynamics import batched_coexistence_temperatures
 
 plt.rcParams["text.usetex"] = False
 
@@ -35,7 +37,7 @@ plt.rcParams["text.usetex"] = False
 # Configuration
 # ------------------------------------------------------------------------------
 # Wall type: "wn2" or "wc" (sets Vext params and pkldir)
-WALL = "wc"
+WALL = "lg"
 
 outdir = os.path.join(script_dir, "..", "output") + "/"
 datadir = os.path.join(script_dir, "..", "data") + "/"
@@ -43,22 +45,24 @@ if WALL == "wn2":
     pkldir = os.path.join(datadir, "dataset", "pkl", "profiles_wl_wn2") + "/"
 elif WALL == "wc":
     pkldir = os.path.join(datadir, "dataset", "pkl", "profiles_wl_wc") + "/"
+elif WALL == "lg":
+    pkldir = os.path.join(datadir, "dataset", "pkl", "profiles_lg") + "/"
 else:
     pkldir = os.path.join(datadir, "dataset", "pkl", "profiles_wl") + "/"
 
-plotdir = get_plot_dir(script_dir, "..", "output", "plot_adsorption_isotherm")
-DEVICE_KIND = "auto"  # or "cuda" | "mps" | "cpu"; override with env TORCH_DEVICE
+plotdir = get_plot_dir(script_dir, "..", "output", "plot_lg_isotherm")
+DEVICE_KIND = "cuda"  # or "cuda" | "mps" | "cpu"; override with env TORCH_DEVICE
 device = resolve_training_device(DEVICE_KIND)
 if device.type == "cuda":
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 # os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 print(f"Using device: {device}")
-TORCH_DTYPE = torch.float64
+TORCH_DTYPE = torch.float32
 torch.manual_seed(42)
 
 # Flags
 JACOBIAN = "STABLE"
-USE_MODEL = 1
+USE_MODEL = 0
 USE_DBH_DIAMETER = 1  # 1: use Barker-Henderson diameter scaling when USE_MODEL
 TRAIN_DNN = 0
 TRAIN_WDA = 0
@@ -81,8 +85,8 @@ Lambda = 1.
 # DFT Solver Params
 # ------------------------------------------------------------------------------
 newton_max_steps = 1600
-newton_tol = 5e-8
-newton_alpha = 0.5
+newton_tol = 1e-7
+newton_alpha = 0.9
 newton_verbose = 1
 
 cont_ds = 0.05 #* (1 - 2*(ensemble == "NVT"))
@@ -100,6 +104,8 @@ if WALL == "wn2":
     Ew, sigmaw = 1.2, 1.2
 elif WALL == "wc":
     Ew, sigmaw = 1., 2.
+elif WALL == "lg":
+    Ew, sigmaw = 0., 1.
 else:
     Ew, sigmaw = 1., 1.
 cutoff_wall = 10. * R
@@ -108,9 +114,9 @@ cutoff_wall = 10. * R
 # Mesh
 # ------------------------------------------------------------------------------
 ContactArea = 40*40 
-L = 30.
+L = 50.
 xmin, xmax = -L, L
-Nx = int(2 * L / (0.15 * R))
+Nx = int(2 * L / (0.2 * R))
 x = torch.linspace(xmin, xmax, Nx, dtype=TORCH_DTYPE).to(device)
 dx = x[1] - x[0]
 x_wall = xmin - 0.001 * sigmaw
@@ -124,7 +130,7 @@ BS = 1
 Vext = (
     (LJ93(x, x_wall, Ew, sigmaw) - LJ93(cutoff_wall*torch.ones_like(x), x_wall, Ew, sigmaw)) 
     * 
-    torch.sigmoid(-(x - x_wall - cutoff_wall) / (0.001)) 
+    torch.sigmoid(-(x - x_wall - cutoff_wall) / (0.001)) *0.
 )[None,...]  # [B, 1, Nx].      # Shifted 
 
 BC_R = "NONE"  # Right BC: NONE, ZEROGRAD, SYMM available
@@ -190,7 +196,7 @@ def run_evaluation(T_val, N_val, N_start, target_density, rho_init, refine, plot
 
         
     eq_params["beta"] = torch.tensor(1/T_val, dtype=TORCH_DTYPE, device=device)[None, None]
-    eq_params["mu"] = N_start / ContactArea
+    eq_params["mu"] = N_start 
     # eq_params["mu"] = torch.tensor(0.7 * N_val / (20**2), dtype=torch.double).to(device)[None, None]
     eq_params["target_density"] = target_density
     sol["rho_guess"] = rho_init.to(device)
@@ -285,28 +291,50 @@ print("Initialized new empty DataFrame.")
 T_vals = [0.55, 0.60, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0]
 N_vals = [8000,]
 
-a = -L + 5*sigmaw
+rho_v_b, rho_l_b = batched_coexistence_temperatures(
+                                T_list=T_vals,
+                                eq_params=eq_params,
+                                sol= sol,
+                                ml_state_dicts=ml_state_dicts,
+                                use_model=sol["USE_MODEL"],
+                                rho_init_pair=(1e-8, 1.0 - 1e-8),
+                                tol=1e-5,
+                                max_iter=100000,
+                                alpha=0.7,
+                                chunk_size=len(T_vals),   # or smaller if memory becomes an issue
+                                verbose=True,
+                            )  # (B,) x2 
+
+
+
+#rho_l = 0.9 #pc_nn.loc[T_val, "rho_l"]
+#rho_v = 0.01 #pc_nn.loc[T_val, "rho_v"]
+# rho_init = (torch.sigmoid((mesh["x"]+a))*torch.sigmoid(-(mesh["x"]-a))*(rho_l - rho_v) + rho_v)[None, None, ...].to(device).double() 
+a = 15.
+rho_init_full = (
+    torch.sigmoid(2*(mesh["x"][None,None,:]+a))  # x>-a
+    *
+    (rho_l_b[:,None,None] - rho_v_b[:,None,None])*(torch.sigmoid(-2*(mesh["x"][None,None,:]-a))  # x<a
+     ) + rho_v_b[:,None,None]  # (B,1,Nx) 
+    ).to(device=device, dtype=TORCH_DTYPE)
+
 
 for N_val in N_vals:
     new_results = []
-    for T_val in T_vals:
+    for iT, T_val in enumerate(T_vals):
         print(f"\n\nRunning N={N_val}, T={T_val:.2f}... ")
-        rho_l = 0.8 #pc_nn.loc[T_val, "rho_l"]
-        rho_v = 0.01 #pc_nn.loc[T_val, "rho_v"]
 
-        # rho_init = (torch.sigmoid((mesh["x"]+a))*torch.sigmoid(-(mesh["x"]-a))*(rho_l - rho_v) + rho_v)[None, None, ...].to(device).double() 
-        rho_init = 0.000001*(torch.sigmoid(10*(mesh["x"]+L))*torch.sigmoid(-10*(mesh["x"]-a))*(rho_l - rho_v) + rho_v)[None, None, ...].to(device=device, dtype=TORCH_DTYPE) 
-
+        rho_init = rho_init_full[iT:iT+1,:,:]
         target_density = 25/(2*L)
-        N_start = rho_init.sum(-1)*mesh["dx"]*ContactArea
-
+        N_start = rho_init.sum(-1)*mesh["dx"]
+    
         result = run_evaluation(
                                     T_val, 
                                     N_val, 
                                     N_start,
                                     target_density,
                                     rho_init, 
-                                    refine=1,
+                                    refine=0,
                                     plot_prefix="temp/"
                                     )
         
@@ -314,6 +342,6 @@ for N_val in N_vals:
 
         df_new = pd.DataFrame(new_results).set_index(["N", "T"]).sort_index()
         df_new = pd.concat([data, df_new])
-        isotherm_path = os.path.join(pkldir, f"isotherm_profiles_wl_{WALL}.pkl")
+        isotherm_path = os.path.join(pkldir, f"isotherm_profiles_lg_{WALL}.pkl")
         ensure_plot_dir(isotherm_path)
         tensors_to_cpu_for_storage(df_new).to_pickle(isotherm_path)
