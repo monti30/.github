@@ -23,6 +23,9 @@ src/**/*.pyc
 data/ml_model/ml_dicts0
 data/ml_model/ml_dicts1
 data/ml_model/intermediate_models
+data/dataset/md_planar_wc/local
+data/dataset/pkl/bulk_tmd/** 
+output/**
 
 !output/**/.gitkeep
 !data/**/.gitkeep
