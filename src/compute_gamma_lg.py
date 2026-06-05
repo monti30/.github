@@ -55,7 +55,7 @@ DEVICE_KIND = "auto"
 TORCH_DTYPE = torch.float32
 RESTART_ML_MODEL = 1
 USE_MODEL = 1
-USE_DBH_DIAMETER = 1
+USE_DBH_DIAMETER = 0
 TRAIN_DNN = 0
 TRAIN_WDA = 0
 SAVE_MODEL = 0
@@ -80,8 +80,9 @@ if WALL == "lg":
     Ew, sigmaw = 0.0, 1.0
 elif WALL == "wc":
     Ew, sigmaw = 1.0, 2.0
-else:
+elif WALL == "wn2":
     Ew, sigmaw = 1.2, 1.2
+    
 cutoff_wall = 10.0 * R
 BC_R = "NONE"
 ensemble = "NVT"

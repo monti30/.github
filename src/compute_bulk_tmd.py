@@ -47,7 +47,7 @@ if __name__ == "__main__":
     # Flags
     JACOBIAN = "EXACT"
     USE_MODEL = 1
-    USE_DBH_DIAMETER = 1
+    USE_DBH_DIAMETER = 0
     TRAIN_DNN = 0
     TRAIN_WDA = 0
     RESTART_ML_MODEL = 1
@@ -216,7 +216,7 @@ if __name__ == "__main__":
                                 rho_init_pair=(1e-15, 1.0 - 1e-15),
                                 tol=1e-7,
                                 max_iter=100000,
-                                alpha=0.9,
+                                alpha=0.5,
                                 chunk_size=len(T_list),   # or smaller if memory becomes an issue
                                 verbose=True,
                             )

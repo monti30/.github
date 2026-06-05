@@ -212,7 +212,7 @@ def main():
 
     # 2. Build z_profiles_0.pkl (LDA reference)
     if args.skip_lda:
-        print("Skipping LDA solve (--skip-lda); using MD rho as reference.")
+        print("Skipping LDA solve (--skip-lda); using source rho as reference.")
         df_0 = df_md[["x", "rho"]].copy()
     else:
         print("Computing LDA reference profiles (z_profiles_0)...")
@@ -265,9 +265,9 @@ def main():
         }
         df_0 = build_z_profiles_0(df_md, mesh, eq_params, sol, device, Ew, sigmaw)
 
-        z_profiles_0_path = output / "z_profiles_0.pkl"
-        tensors_to_cpu_for_storage(df_0).to_pickle(z_profiles_0_path)
-        print(f"Wrote {z_profiles_0_path}")
+    z_profiles_0_path = output / "z_profiles_0.pkl"
+    tensors_to_cpu_for_storage(df_0).to_pickle(z_profiles_0_path)
+    print(f"Wrote {z_profiles_0_path}")
 
     print(f"\nDone. Run adj_train.py (pkldir={output})")
 

@@ -28,7 +28,7 @@ plt.rcParams["text.usetex"] = True
 import os
 # Compute backend: "auto" | "cuda" | "mps" | "cpu". Override: export TORCH_DEVICE=mps
 os.environ["CUDA_VISIBLE_DEVICES"] = "2" 
-DEVICE_KIND = "cpu"
+DEVICE_KIND = "cuda"
 device = resolve_training_device(DEVICE_KIND)
 if device.type == "cuda":
     torch.backends.cudnn.benchmark = True
@@ -67,9 +67,9 @@ USE_DBH_DIAMETER = 1  # 1: use Barker-Henderson diameter scaling when USE_MODEL
 TRAIN_DNN = 1
 TRAIN_DNN_REP = 1
 TRAIN_WDA = 1
-RESTART_ML_MODEL = 1
+RESTART_ML_MODEL = 0
 SAVE_MODEL = 1
-SAVE_INTERMEDIATE_MODELS = 1
+SAVE_INTERMEDIATE_MODELS = 0
 JACOBIAN = "EXACT"
 
 
@@ -130,7 +130,7 @@ cutoff_wall = 10. * R
 # 5 // Mesh: Spatial Discretization
 L           = 30.
 xmin, xmax  = 0., 2*L
-Nx          = int(2*L/(0.05*R))
+Nx          = int(2*L/(0.1*R))
 BS          = 5
 x_bc        = [xmin, xmax]
 x           = torch.linspace(xmin, xmax, Nx, dtype=TORCH_DTYPE).to(device)

@@ -62,8 +62,8 @@ torch.manual_seed(42)
 
 # Flags
 JACOBIAN = "STABLE"
-USE_MODEL = 0
-USE_DBH_DIAMETER = 1  # 1: use Barker-Henderson diameter scaling when USE_MODEL
+USE_MODEL = 1
+USE_DBH_DIAMETER = 0  # 1: use Barker-Henderson diameter scaling when USE_MODEL
 TRAIN_DNN = 0
 TRAIN_WDA = 0
 RESTART_ML_MODEL = 1
@@ -85,12 +85,12 @@ Lambda = 1.
 # DFT Solver Params
 # ------------------------------------------------------------------------------
 newton_max_steps = 1600
-newton_tol = 1e-7
+newton_tol = 1e-6
 newton_alpha = 0.9
 newton_verbose = 1
 
 cont_ds = 0.05 #* (1 - 2*(ensemble == "NVT"))
-cont_continuation_steps = 30000
+cont_continuation_steps = 1 
 cont_max_corrector_steps = 500
 cont_alpha = 0.9
 
@@ -114,9 +114,9 @@ cutoff_wall = 10. * R
 # Mesh
 # ------------------------------------------------------------------------------
 ContactArea = 40*40 
-L = 50.
+L = 30.
 xmin, xmax = -L, L
-Nx = int(2 * L / (0.2 * R))
+Nx = int(2 * L / (0.075 * R))
 x = torch.linspace(xmin, xmax, Nx, dtype=TORCH_DTYPE).to(device)
 dx = x[1] - x[0]
 x_wall = xmin - 0.001 * sigmaw
@@ -325,7 +325,7 @@ for N_val in N_vals:
         print(f"\n\nRunning N={N_val}, T={T_val:.2f}... ")
 
         rho_init = rho_init_full[iT:iT+1,:,:]
-        target_density = 25/(2*L)
+        target_density = 30/(2*L)
         N_start = rho_init.sum(-1)*mesh["dx"]
     
         result = run_evaluation(
@@ -334,7 +334,7 @@ for N_val in N_vals:
                                     N_start,
                                     target_density,
                                     rho_init, 
-                                    refine=0,
+                                    refine=1,
                                     plot_prefix="temp/"
                                     )
         

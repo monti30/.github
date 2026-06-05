@@ -7,7 +7,7 @@ class REPULSIVE_FREE_ENERGY():
     def __init__(self):
         
         R = self.eq_params["R"]
-        a = torch.tensor(6)/(torch.pi*(R)**3)
+        a = torch.tensor(0.996*6)/(torch.pi*(R)**3)
         self.eq_params["a"] = a[None] # (1,)
 
 
